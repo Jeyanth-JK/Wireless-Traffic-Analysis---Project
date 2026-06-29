@@ -1,67 +1,111 @@
 # 📡 Wireless Traffic Analysis and Visualization (WLAN-SOC)
 
-A dedicated security architecture lab establishing passive wireless network traffic inspection via custom Network Intrusion Detection Systems (NIDS) and visual data analysis tooling. 
+A security architecture lab for passive wireless network traffic inspection using a custom Network Intrusion Detection System (NIDS) and a visual data web dashboard.
 
-This project orchestrates continuous packet processing, filters signatures for malicious activity via customized rule definitions, and streams logs seamlessly to an executive Web Dashboard and a Power BI analytics workflow.
-
----
-
-## Technical Architecture Overview
-
-| Layer | Component & Technology |
-| :--- | :--- |
-| **Ingestion Core** | Suricata IDS/IPS Engine *(Passive Monitoring Configuration)* |
-| **Automation Backend** | Python 3 *(Flask, Subprocess Multi-threading Execution)* |
-| **Exposition Layer** | Ngrok HTTP Secure Tunneling Protocols |
-| **Analytics Engine** | Power BI Business Intelligence Desktop & Custom HTML5/JS Dashboard |
+This framework processes live network packets, filters signatures for malicious activity via custom rules, and streams alert logs to a web dashboard or Power BI analytics workflow.
 
 ---
 
-## Prerequisites & Dependencies
+## 🛠️ Technical Architecture
 
-> ⚠️ **Important Requirement:** Ensure your Linux distribution has a wireless card capable of entering **monitor/promiscuous mode**.
+| Layer | Component & Technology | Description |
+| :--- | :--- | :--- |
+| **Ingestion** | Suricata IDS/IPS Engine | Sniffs raw packets passively and dumps alert telemetry to `eve.json`. |
+| **Backend** | Python 3 (Flask + Systemd) | Multi-threaded engine that serves the log data via a local REST API. |
+| **Exposition** | Ngrok Secure Tunneling | Securely exposes the local API (`5000`) or Web Console (`80`) to the internet. |
+| **Frontend** | Apache2 + HTML5/JS | Apache serves static dashboard assets; JS pulls logs via live API polling. |
+
+---
+
+## 📋 Step-by-Step Deployment Guide
+
+### Step 1: Install & Authenticate Ngrok
+1. Download and install the Ngrok agent:
+   ```bash
+   curl -s [https://ngrok-agent.s3.amazonaws.com/ngrok.asc](https://ngrok-agent.s3.amazonaws.com/ngrok.asc)
+   | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+   echo "deb [https://ngrok-agent.s3.amazonaws.com](https://ngrok-agent.s3.amazonaws.com) buster main" \
+   | sudo tee /etc/apt/sources.list.d/ngrok.list
+   sudo apt update && sudo apt install ngrok -y
+   
+1. Link your Ngrok account token (Retrieve this from your [Ngrok Dashboard](https://dashboard.ngrok.com)):
 
 ```bash
-# Update local packages
-sudo apt update && sudo apt upgrade -y
-
-# Install Suricata core engine
-sudo apt install suricata -y
-
-# Install backend python execution environments
-pip install flask flask-cors
+ngrok config add-authtoken <YOUR_AUTHTOKEN>
 ```
 
----
-## Installation & Setup Instructions
-1. Provision Custom Suricata Rules
-Add your internal specific network threat parameters inside your local rules directory:
+Step 2: Configure Suricata Parameters
+1. Find your target network interface name (e.g., wlan0, mon0, eth0):
+
+```bash
+ip link show
+```
+⚠️ Note: Ensure your network card is switched to monitor/promiscuous mode if analyzing raw wireless traffic.
+
+2. Open your local rules file:
 ```bash
 sudo nano /etc/suricata/rules/local.rules
 ```
-
-Example Rule Sample:
+3. Add your custom threat signatures. Example:
 ```bash
 alert tcp any any -> any any (msg:"POTENTIAL INSIDER RECONNAISSANCE ACTIVITY"; sid:1000001; rev:1;)
 ```
+4. Confirm that /etc/suricata/suricata.yaml includes a pointer to your local.rules file.
 
-2. Deployment Execution
-To guarantee that the monitoring script stays alive even if your terminal session disconnects, run the orchestrator tool as a background daemon process using nohup:
+Step 3: Run the Automated Installer
+
+The install.sh script installs system dependencies, configures directory pathways, links Apache components, and registers the background systemd service without auto-starting it.
 ```bash
-sudo nohup python3 soc_orchestrator.py wlan0 > soc_output.log 2>&1 &
+chmod +x install.sh
+sudo ./install.sh
+```
+Installer Prompts: Provide your target interface (or press Enter for default) and your primary binding API port (default: 5000).
+
+Step 4: Deploy Frontend Web Assets
+
+1. Copy your visual dashboard frontend files from your project's static/ folder into Apache's server directory:
+```bash
+sudo cp -r static/* /var/www/html/wlan-soc/
+sudo chown -R www-data:www-data /var/www/html/wlan-soc/
+```
+
+2. Verify your frontend JavaScript file (app.js or script tags) accurately points to your local/public backend API route:
+JavaScript
+```bash 
+fetch('http://localhost:5000/api/logs')
+  .then(response => response.json())
+  .then(data => renderLogsToDashboard(data));
 ```
 
 
-## Quick-Copy Execution Guide
-3. Initialize Web UI View
-To view live alerts, open the custom index.html file locally or update the JavaScript connection string with your active Ngrok endpoint URL to share live telemetry streams with distributed web nodes.
+Step 5: Start & Manage the Service (Systemd)
+
+1. The installer registers the framework but leaves it stopped. Use the following standard commands to manage it:
+
+Start the Monitoring Framework Daemon:
 ```bash
-# Step 1: Verify your active wireless interface label
-ip link show
+sudo systemctl start wlan-soc
+```
+2. Enable Boot-time persistence execution:
+```bash
+sudo systemctl enable wlan-soc
+```
 
-# Step 2: Execute the automated telemetry hub (Foreground Debug mode)
-sudo python3 soc_orchestrator.py <your_interface_name>
+3. Verify active status metrics:
+```bash
+sudo systemctl status wlan-soc
+```
 
-# Step 3: View live system outputs
-tail -f suricata_logs/eve.json
+4. Tail stream system telemetry & execution output:
+```bash
+    sudo journalctl -u wlan-soc -f
+```
+
+🔒 Security Lockdown & Service Termination
+
+When you stop the service via Systemd, an integrated ExecStop routine automatically executes a structural cleanup. It shuts down background processes, terminates open Ngrok connections, and clears active socket ports instantly.
+
+To cleanly kill all associated sniffing engines and free up ports, run:
+```bash
+sudo systemctl stop wlan-soc
 ```
