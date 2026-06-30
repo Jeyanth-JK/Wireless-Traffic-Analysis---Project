@@ -6,172 +6,210 @@ This platform pairs the **Suricata NIDS Engine** with a multi-threaded **Python 
 
 ---
 
-## 🛠️ System Architecture
-```bash
-                                                [ Wireless Client ]
-                                                         │
-                                                         ▼ (Packets)
-                                       ┌─────────── wlan0 / eth0 ───────────┐
-                                       │  Suricata IDS Engine (Sniffing)    │
-                                       └─────────────────┬──────────────────┘
-                                                         │ Writes alerts to
-                                                         ▼
-                                       ┌───────────── eve.json ─────────────┐
-                                       │  Flask API Orchestrator Backend    │
-                                       └─────────────────┬──────────────────┘
-                                                         ├─► Serves Web UI Dashboard (Port: 2000)
-                                                         └─► Spawns Ngrok Safe Tunnel
-                                                         │
-                                                         ▼
-                                                [ Remote Public URL ]
+&nbsp;
 
+## 🛠️ System Architecture
+
+```text
+                                   [ Wireless Client ]
+                                           │
+                                      ▼ (Packets)
+                    ┌──────────────── wlan0 / eth0 ────────────────┐
+                    │       Suricata IDS Engine (Sniffing)         │
+                    └─────────────────────┬────────────────────────┘
+                                          │ Writes alerts to
+                                          ▼
+                    ┌─────────────── eve.json ─────────────────────┐
+                    │       Flask API Orchestrator Backend         │
+                    └─────────────────────┬────────────────────────┘
+                                          ├─► Serves Web UI Dashboard (Port: 2000)
+                                          └─► Spawns Ngrok Safe Tunnel
+                                          │
+                                          ▼
+                                 [ Remote Public URL ]
 ```
+<br>
+
+### 🗺️ Operational Component Breakdown
 
 | Layer | Component | Technology | Description |
 | :--- | :--- | :--- | :--- |
-| **Ingestion** | IDS Engine | Suricata | Sniffs raw packets on the configured interface and outputs JSON alert telemetry. |
-| **Backend** | Orchestrator | Python 3 + Flask | Parses engine logs, manages core processes, and exposes a REST API. |
-| **Exposition** | Secure Edge | Ngrok Agent | Automatically exposes the local dashboard port safely to the internet. |
-| **Frontend** | Dashboard | HTML5 / JS / Tailwind | Client-side engine that pulls real-time analytics using live API polling. |
-
+| 📥 **Ingestion** | IDS Engine | `Suricata` | Sniffs raw packets on the configured interface and outputs JSON alert telemetry. |
+| ⚙️ **Backend** | Orchestrator | `Python 3` + `Flask` | Parses engine logs, manages core processes, and exposes a REST API. |
+| 🌐 **Exposition**| Secure Edge | `Ngrok Agent` | Automatically exposes the local dashboard port safely to the internet. |
+| 📊 **Frontend** | Dashboard | `HTML5` / `JS` / `Tailwind` | Client-side engine that pulls real-time analytics using live API polling. |
 ---
-
-
 ## 📋 Pre-Requisites & Requirements
 
-Before deploying, ensure your host platform meets the following foundational dependencies:
+Before deploying, ensure your host platform meets the following foundational environment metrics.
+🖥️ Base Environment
 
-* **Operating System:** Linux (Kali Linux, Ubuntu, or Debian-based distributions).
-* **Privileges:** Complete `sudo` root execution rights.
-* **Hardware:** A network interface capable of promiscuous or monitor mode (`wlan0`, `eth0`).
-* **Dependencies Installed by Agent:** `suricata`, `python3`, `pip3`, `curl`, `jq`.
+   > Operating System: Linux (Kali Linux, Ubuntu, or Debian-based distributions).
 
+   > Privileges: Complete sudo root execution rights.
+
+  > Hardware: A network interface capable of promiscuous or monitor mode (wlan0, eth0).
+<br>
+🐍 Python Global Package Setup
+
+  > [!CAUTION]
+  > CRITICAL SERVICE REQUIREMENT <br>
+    Because the background system daemon (systemd) executes the orchestrator script under the global root user space, all required Python dependencies must be installed globally.<br>Run the command below before triggering the installer to prevent immediate ModuleNotFoundError crashes.
+
+Bash
+```
+sudo pip3 install flask flask-cors --break-system-packages
+```
 ---
 
-## Step-by-Step Deployment Guide
+## 🚀 Chronological Step-by-Step Deployment Guide
 
-Follow these steps in order to provision and start the automated monitoring cluster.
+Follow these configuration steps in exact sequential order to spin up the automated monitoring cluster.
+#### Step 1: Add your Ngrok Authentication Token
 
-### Step 1: Add your Ngrok Authentication Token
+  > Install and retrieve your custom Auth Token from your personal Ngrok Dashboard.
 
-1. Retrieve your Auth Token from your personal [Ngrok Dashboard](https://dashboard.ngrok.com).
-2. Authenticate the agent under `sudo` so the system service can access it:
+  > Authenticate your local tracking agent:
 
-```bash
+Bash
+```
 sudo ngrok config add-authtoken <YOUR_NGROK_AUTH_TOKEN>
 ```
+<br>
 
-### Step 2: Deploy Custom Suricata Configuration (suricata.yaml)
+#### Step 2: Deploy Custom Suricata Configuration
 
-This repository includes a customized suricata.yaml file optimized for wireless log extraction.
-🔍 What modifications are inside this custom YAML?
-   
-Eve-Log JSON Stream Enabled: It explicitly ensures that eve.json is turned on with alert types enabled so that the Flask backend can parse them.
-
-   Optimized Local Rule Paths: It points directly to `/etc/suricata/rules/local.rules` as the primary classification engine, bypassing massive public lists that slow down initial testing.
+  > This repository includes a customized suricata.yaml file pre-optimized specifically for local wireless network log extraction and interface handling.
 
 
-🛠️ Deployment Instructions:
-
-Copy the repository's custom YAML file directly over the default system installation file:
 Bash
-```bash
-sudo cp config/suricata.yaml /etc/suricata/suricata.yaml
+```
+sudo cp suricata/suricata.yaml /etc/suricata/suricata.yaml
 ```
 
-Step 3: Implement Testing Signatures (local.rules)
+  > Eve-Log JSON Stream Enabled: Explicitly ensures that eve.json output targets are toggled on with alert structures active so the Flask parser can query events.
 
-This repository provides a tailored local.rules file containing optimized detection rules to verify that the end-to-end telemetry mapping works perfectly.
-🔍 What modifications are inside this custom rules file?
+  > Targeted Local Rule Paths: Maps directly to your custom `/etc/suricata/rules/local.rules` asset as the absolute tracking priority, stripping away heavy public lists that slow down initial testing loops.
+<br>
 
-The rules are custom-built with specific sid tags (1,000,001 to 1,000,004) to prevent collisions with default public signatures. They also use the explicit classtype:not-suspicious; classification so they safely trigger the UI counters without flagging false critical events during setup.
+#### Step 3: Implement Testing Signatures (local.rules)
 
-Ensure the rules directory exists on your system host:
-   Bash
+  > This repository provides a tailored local.rules file containing optimized detection rules to verify that the end-to-end telemetry pipeline is working smoothly.
 
-      sudo mkdir -p /etc/suricata/rules
+  > Ensure the core rules storage directory tree exists on your host:
 
-Copy the rules file from this repository into Suricata's active rule pathway:
-   Bash
+Bash
+```
+sudo mkdir -p /etc/suricata/rules
+```
 
-      sudo cp config/local.rules /etc/suricata/rules/local.rules
+  > Move the rule configuration files from your repository workspace to Suricata's rule matrix:
 
-If you want to view or manually append signatures to this file, you can modify it at any time:
-   Bash
+Bash
+```
+sudo cp suricata/local.rules /etc/suricata/rules/local.rules
+```
+>[!TIP]
+> The rules are custom-built using specialized sid values ranging from 1,000,001 to 1,000,004 to prevent logic or database collisions with default public signatures. <br>They utilize the classtype:not-suspicious; classification tag to safely trigger frontend counters without generating false system security flags during initial setups.
 
-    sudo nano /etc/suricata/rules/local.rules
+  > If you wish to view or manually append custom operational rules to this engine layer later, edit the live path directly:
 
+Bash
+```
+sudo nano /etc/suricata/rules/local.rules
+```
+<br>
 
+#### Step 4: Fine-Tune Web Dashboard Ports
 
-Step 4: Fine-Tune Web Dashboard Ports
+  > The ecosystem tracks configuration variables inside a centralized data file under the config/ directory to manage system interface bindings.
 
-The repository includes a core configuration component under the config/ workspace directory to tell the backend engine exactly where to run.
-
-Open config/config.json and verify your interface framework targets:
+  > Open config/config.json and adjust the variables to line up with your local hardware targets:
     JSON
-
+```
     {
         "interface": "wlan0",
         "port": 2000,
         "backup_port": 2001
     }
+```
 
-   Note: If you want to sniff ethernet traffic instead of wireless, change "interface" to eth0. If you want to use a custom dashboard port, change "port" to your desired integer (e.g., 1212).
+  >[!TIP]
+  > If running an Ethernet-based monitoring architecture instead of an over-the-air asset, update the "interface" entry string from wlan0 to eth0.
+  >To bind your dashboard tracking console onto a separate network layer, adjust the target "port" integer to any preferred alternative (e.g., 1212).
+<br>
 
-Step 5: Execute the Automated System Installer
+#### Step 5: Execute the Automated System Installer
 
-The install.sh engine cleanly sets up backend packages, ensures conflicting web servers (like Apache2) are shut down to prevent port binding issues, and registers the background Systemd daemon tracking logic.
+  > The install.sh sequence installs missing software packages, automatically kills off conflicting web servers (such as native Apache2 instances) to keep port access clear, and safely mounts the background monitoring engine profile.
 
-   Mark the script as executable:
-    Bash
+  > Grant the script executable and Kick off the automated deployment:
 
-      chmod +x install.sh
-
-Run the deployment sequence:
 Bash
+```
+chmod +x install.sh
+sudo ./install.sh
+```
+<br>
+<br>
 
-    sudo ./install.sh
+## 🚦Managing the Framework Service
 
-🚦 Managing the Framework Service
+  > The cluster runs seamlessly inside a single background Systemd unit profile named wlan-soc.service.
+ 
+ 🟢 Start the Service Core
 
-The cluster runs seamlessly inside a single Systemd unit profile named wlan-soc.service.
-Start the Service
 Bash
+```
+sudo systemctl start wlan-soc
+```
 
-      sudo systemctl start wlan-soc
+  🔄 Enable Automatic Boot-Time Persistence
 
-Enable Automatic Boot-Time Execution
 Bash
+```
+sudo systemctl enable wlan-soc
+```
 
-      sudo systemctl enable wlan-soc
+   🌐 Retrieving Active Access Endpoints
 
-Check Live Telemetry Logs & URLs
+  > [!IMPORTANT]
+  > When evaluating system initialization metrics, pay close attention to the terminal console printouts. <br>
+  The orchestrator script dynamically pulls your local listener socket and your secure public Ngrok proxy tunnel URL directly into the status block:
 
-When checking the status of the service, pay close attention to the console printout logs. The script dynamically lists your local endpoint URL and your public Ngrok tunnel URL right in the output:
 Bash
+```
+sudo systemctl status wlan-soc
+```
 
-      sudo systemctl status wlan-soc
+<br>
 
-Expected Terminal View Output:
-Plaintext
+> [!TIP]
+> **Active Network Gateways:**
+> * **Local Console:** `http://localhost:2000`
+> * **Public Ngrok Access:** `https://xxxx-xx-xx-xx.ngrok-free.app`
 
-====================================================
-[+] Dashboard UI and endpoints running on: [http://0.0.0.0:2000](http://0.0.0.0:2000)
-====================================================
-====================================================
-[+] NGROK PUBLIC ACCESS URL: [https://xxxx-xx-xx-xx.ngrok-free.app](https://xxxx-xx-xx-xx.ngrok-free.app)
-====================================================
+<br>
 
-Tail the Live Output Logs
+  🪵 Tail the Live Output Telemetry Stream
+
+  > Keep a live console session running to monitor telemetry traffic passing through the analytics engine processing loops:
+
 Bash
+```
+sudo journalctl -u wlan-soc -f
+```
 
-      sudo journalctl -u wlan-soc -f
+  🔒 Safe Service Termination
 
-🔒 Safe Service Termination
+  > [!WARNING]
+  > Stopping the service via Systemd triggers an automated teardown script sequence.<br>
+  This operation instantly drops the open Ngrok socket connection, stops background sniffing tasks, and frees system network ports to prevent interface locks.
 
-Stopping the service automatically invokes an integrated cleanup routine that terminates background packet-sniffing tasks, drops the open Ngrok socket connection, and frees system network ports instantly.
+  > To halt execution processing lines safely, run:
 
-To shut down the entire monitoring engine cleanly, run:
 Bash
+```
+sudo systemctl stop wlan-soc
+```
 
-      sudo systemctl stop wlan-soc
