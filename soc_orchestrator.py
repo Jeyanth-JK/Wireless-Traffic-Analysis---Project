@@ -10,7 +10,8 @@ from flask_cors import CORS
 
 # Setup working base locations dynamically
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "Static")
+# FIXED: Changed from "Static" to lowercase "static" to match GitHub/Linux standards
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 CONFIG_PATH = os.path.join(BASE_DIR, "config", "config.json")
 
 app = Flask(__name__, static_folder=STATIC_DIR)
@@ -103,8 +104,8 @@ def start_ngrok(port):
         # Explicit configuration tracking to use system-wide configurations if available
         subprocess.Popen(["ngrok", "http", str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        # Check for URL registration up to 5 times
-        for attempt in range(5):
+        # Check for URL registration up to 10 times to provide more leeway
+        for attempt in range(10):
             time.sleep(2)
             try:
                 res = subprocess.run(["curl", "-s", "http://127.0.0.1:4040/api/tunnels"], capture_output=True, text=True)
